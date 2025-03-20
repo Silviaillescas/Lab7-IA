@@ -1,128 +1,122 @@
 import numpy as np
 import random
+import matplotlib.pyplot as plt
 
 # Parámetros del juego
 ROWS = 6
 COLS = 7
 PLAYER = 1  # Jugador humano
-AI = 2      # IA
+AI_TD = 2   # IA con TD Learning
+ALPHA = 0.05  # Tasa de aprendizaje (ajustada para mejorar el rendimiento)
+GAMMA = 0.9  # Factor de descuento
+EPSILON = 0.1  # Probabilidad de exploración (reducida después de entrenamiento)
+
+# Inicialización de la tabla Q (estado -> acción)
+Q_table = {}
 
 def crear_tablero():
-    """Crea un tablero vacío de Connect Four."""
     return np.zeros((ROWS, COLS), dtype=int)
 
-def movimiento_valido(tablero, col):
-    """Verifica si una columna tiene espacio disponible."""
-    return tablero[0][col] == 0
+def obtener_movimientos_validos(tablero):
+    return [col for col in range(COLS) if tablero[0][col] == 0]
 
 def obtener_fila_valida(tablero, col):
-    """Devuelve la fila más baja disponible en la columna seleccionada."""
     for fila in range(ROWS-1, -1, -1):
-        if tablero[fila][col] == 0:
-            return fila
+        if tablero[fila, col] == 0:
+            return int(fila)
     return None
 
 def hacer_movimiento(tablero, col, pieza):
-    """Coloca una pieza en el tablero si es posible."""
     fila = obtener_fila_valida(tablero, col)
     if fila is not None:
-        tablero[fila][col] = pieza
+        tablero[fila, col] = pieza
         return True
     return False
 
-def imprimir_tablero(tablero):
-    """Imprime el tablero en formato visual."""
-    print(np.flip(tablero, 0))  # Invierte para que la fila 0 esté abajo
-
 def verificar_victoria(tablero, pieza):
-    """Verifica si un jugador ha ganado."""
-    # Horizontal
     for c in range(COLS-3):
         for r in range(ROWS):
             if all(tablero[r, c+i] == pieza for i in range(4)):
                 return True
-    # Vertical
     for c in range(COLS):
         for r in range(ROWS-3):
             if all(tablero[r+i, c] == pieza for i in range(4)):
                 return True
-    # Diagonal positiva
     for c in range(COLS-3):
         for r in range(ROWS-3):
             if all(tablero[r+i, c+i] == pieza for i in range(4)):
                 return True
-    # Diagonal negativa
     for c in range(COLS-3):
         for r in range(3, ROWS):
             if all(tablero[r-i, c+i] == pieza for i in range(4)):
                 return True
     return False
 
-def obtener_movimientos_validos(tablero):
-    """Devuelve una lista de columnas con espacio disponible."""
-    return [col for col in range(COLS) if movimiento_valido(tablero, col)]
+def elegir_accion(tablero):
+    """Elige una acción usando ε-greedy."""
+    movimientos_validos = obtener_movimientos_validos(tablero)
+    if not movimientos_validos:
+        return None
 
-def evaluar_tablero(tablero, pieza):
-    """Evalúa el tablero desde la perspectiva de la IA."""
-    oponente = PLAYER if pieza == AI else AI
-    score = 0
+    estado = str(tablero)
+    if estado not in Q_table:
+        Q_table[estado] = np.zeros(COLS)
 
-    # Puntuación para el centro del tablero
-    centro_columna = [int(i) for i in list(tablero[:, COLS//2])]
-    score += centro_columna.count(pieza) * 3
+    if random.uniform(0, 1) < EPSILON:
+        return random.choice(movimientos_validos)
 
-    # Evaluación de líneas
-    for r in range(ROWS):
-        fila_array = [int(i) for i in list(tablero[r, :])]
-        score += evaluar_linea(fila_array, pieza, oponente)
+    return max(movimientos_validos, key=lambda col: Q_table[estado][col])
 
-    for c in range(COLS):
-        col_array = [int(i) for i in list(tablero[:, c])]
-        score += evaluar_linea(col_array, pieza, oponente)
+def entrenar_td_learning(num_partidas=5000):
+    """TD Learning juega contra sí mismo antes del torneo."""
+    print(f"Entrenando TD Learning con {num_partidas} partidas...")
 
-    for r in range(ROWS-3):
-        for c in range(COLS-3):
-            diag_pos = [tablero[r+i][c+i] for i in range(4)]
-            score += evaluar_linea(diag_pos, pieza, oponente)
+    for _ in range(num_partidas):
+        tablero = crear_tablero()
+        turno = random.choice([AI_TD, PLAYER])
 
-            diag_neg = [tablero[r+3-i][c+i] for i in range(4)]
-            score += evaluar_linea(diag_neg, pieza, oponente)
+        while True:
+            col = elegir_accion(tablero)
+            if col is None:
+                break
 
-    return score
+            hacer_movimiento(tablero, col, turno)
 
-def evaluar_linea(linea, pieza, oponente):
-    """Evalúa una línea de 4 casillas."""
-    score = 0
-    if linea.count(pieza) == 4:
-        score += 100
-    elif linea.count(pieza) == 3 and linea.count(0) == 1:
-        score += 5
-    elif linea.count(pieza) == 2 and linea.count(0) == 2:
-        score += 2
-    if linea.count(oponente) == 3 and linea.count(0) == 1:
-        score -= 4
-    return score
+            if verificar_victoria(tablero, turno):
+                recompensa = 100 if turno == AI_TD else -100
+                break
+            else:
+                recompensa = 0  
+
+            estado = str(tablero)
+            if estado not in Q_table:
+                Q_table[estado] = np.zeros(COLS)
+            
+            Q_table[estado][col] += ALPHA * (recompensa + GAMMA * np.max(Q_table.get(str(tablero), np.zeros(COLS))) - Q_table[estado][col])
+
+            turno = PLAYER if turno == AI_TD else AI_TD
+
+    print("Entrenamiento completado.")
 
 def minimax(tablero, profundidad, alpha, beta, maximizando, poda=True):
-    """Algoritmo Minimax con opción de poda alfa-beta."""
     movimientos_validos = obtener_movimientos_validos(tablero)
-    es_terminal = verificar_victoria(tablero, PLAYER) or verificar_victoria(tablero, AI) or len(movimientos_validos) == 0
+    es_terminal = verificar_victoria(tablero, PLAYER) or verificar_victoria(tablero, AI_TD) or len(movimientos_validos) == 0
 
     if profundidad == 0 or es_terminal:
-        if verificar_victoria(tablero, AI):
-            return (None, 1000000)
+        if verificar_victoria(tablero, AI_TD):
+            return None, 1000000
         elif verificar_victoria(tablero, PLAYER):
-            return (None, -1000000)
+            return None, -1000000
         elif len(movimientos_validos) == 0:
-            return (None, 0)
-        return (None, evaluar_tablero(tablero, AI))
+            return None, 0
+        return None, 0  
 
     if maximizando:
         valor_max = -np.inf
         mejor_col = random.choice(movimientos_validos)
         for col in movimientos_validos:
             copia_tablero = tablero.copy()
-            hacer_movimiento(copia_tablero, col, AI)
+            hacer_movimiento(copia_tablero, col, AI_TD)
             _, nuevo_valor = minimax(copia_tablero, profundidad-1, alpha, beta, False, poda)
             if nuevo_valor > valor_max:
                 valor_max = nuevo_valor
@@ -148,103 +142,125 @@ def minimax(tablero, profundidad, alpha, beta, maximizando, poda=True):
                     break
         return mejor_col, valor_min
 
-def jugar():
-    """Función para jugar contra la IA."""
+def jugar_humano_vs_ia():
+    """Permite que un humano juegue contra la IA TD Learning."""
     tablero = crear_tablero()
-    imprimir_tablero(tablero)
-    turno = random.choice([PLAYER, AI])
-    poda = True  # Se puede cambiar a False para desactivar alpha-beta pruning
+    turno = random.choice([PLAYER, AI_TD])
 
     while True:
+        print(tablero)
+
         if turno == PLAYER:
-            try:
-                col = int(input("Elige una columna (0-6): "))
-                if col not in range(COLS) or not movimiento_valido(tablero, col):
-                    print("Movimiento inválido. Inténtalo de nuevo.")
-                    continue
-                hacer_movimiento(tablero, col, PLAYER)
-                if verificar_victoria(tablero, PLAYER):
-                    imprimir_tablero(tablero)
-                    print("¡Ganaste!")
-                    break
-                turno = AI
-            except ValueError:
-                print("Entrada no válida. Introduce un número entre 0 y 6.")
+            col = int(input("Elige una columna (0-6): "))
+            if col not in obtener_movimientos_validos(tablero):
+                print("Movimiento inválido. Inténtalo de nuevo.")
+                continue
         else:
-            print("Turno de la IA...")
-            col, _ = minimax(tablero, 3, -np.inf, np.inf, True, poda)  # Reducir profundidad para mejorar tiempos
-            if col is not None:
-                hacer_movimiento(tablero, col, AI)
-                if verificar_victoria(tablero, AI):
-                    imprimir_tablero(tablero)
-                    print("La IA ganó.")
-                    break
-                turno = PLAYER
-            else:
-                print("Empate.")
-                break
+            col = elegir_accion(tablero)
 
-        imprimir_tablero(tablero)
+        hacer_movimiento(tablero, col, turno)
 
-def jugar_ia_vs_ia(num_juegos=10):
-    """Simula partidas entre IA sin poda alfa-beta vs. IA con poda alfa-beta."""
-    victorias_sin_poda = 0
-    victorias_con_poda = 0
-    empates = 0
+        if verificar_victoria(tablero, turno):
+            print(tablero)
+            print("¡Ganaste!" if turno == PLAYER else "La IA ganó.")
+            break
 
-    for i in range(num_juegos):
-        print(f"\nJuego {i+1}/{num_juegos}")
+        turno = AI_TD if turno == PLAYER else PLAYER
+
+def jugar_ia_vs_ia():
+    """Simula partidas entre dos IAs TD Learning."""
+    victorias_td = 0
+
+    for _ in range(50):
         tablero = crear_tablero()
-        turno = random.choice([AI, PLAYER])  # Elegir aleatoriamente quién comienza
-        poda = False  # Alternar poda alfa-beta en cada turno
+        turno = AI_TD
 
         while True:
-            imprimir_tablero(tablero)
-
-            if turno == AI:
-                col, _ = minimax(tablero, 3, -np.inf, np.inf, True, poda)
-                hacer_movimiento(tablero, col, AI)
-                if verificar_victoria(tablero, AI):
-                    imprimir_tablero(tablero)
-                    if poda:
-                        victorias_con_poda += 1
-                        print("¡IA con poda alfa-beta ganó!")
-                    else:
-                        victorias_sin_poda += 1
-                        print("¡IA sin poda alfa-beta ganó!")
-                    break
-            else:
-                col, _ = minimax(tablero, 3, -np.inf, np.inf, True, not poda)
-                hacer_movimiento(tablero, col, PLAYER)
-                if verificar_victoria(tablero, PLAYER):
-                    imprimir_tablero(tablero)
-                    if not poda:
-                        victorias_sin_poda += 1
-                        print("¡IA sin poda alfa-beta ganó!")
-                    else:
-                        victorias_con_poda += 1
-                        print("¡IA con poda alfa-beta ganó!")
-                    break
-
-            # Alternar poda alfa-beta en cada turno
-            poda = not poda
-            turno = AI if turno == PLAYER else PLAYER
-
-            if len(obtener_movimientos_validos(tablero)) == 0:
-                empates += 1
-                print("¡Empate!")
+            col = elegir_accion(tablero)
+            if col is None:
                 break
 
-    print("\nResultados Finales:")
-    print(f"IA sin poda alfa-beta ganó {victorias_sin_poda} veces")
-    print(f"IA con poda alfa-beta ganó {victorias_con_poda} veces")
-    print(f"Empates: {empates}")
+            hacer_movimiento(tablero, col, turno)
 
-if __name__ == "__main__":
-    modo = input("Elige el modo de juego: 1 = Humano vs IA, 2 = IA vs IA: ")
-    if modo == "1":
-        jugar()
-    elif modo == "2":
-        jugar_ia_vs_ia(10)
+            if verificar_victoria(tablero, turno):
+                victorias_td += 1
+                break
+
+            turno = AI_TD
+
+    print(f"IA TD Learning ganó {victorias_td} de 50 partidas.")
+
+def jugar_td_vs_minimax(num_juegos=50, poda=False):
+    """Ejecuta partidas de TD Learning vs Minimax y devuelve el número de victorias."""
+    victorias_td = 0
+    victorias_minimax = 0
+
+    for _ in range(num_juegos):
+        tablero = crear_tablero()
+        turno = random.choice([AI_TD, PLAYER])
+
+        while True:
+            if turno == AI_TD:
+                col = elegir_accion(tablero)
+                if col is None:
+                    break
+            else:
+                col, _ = minimax(tablero, 3, -np.inf, np.inf, True, poda)
+
+            hacer_movimiento(tablero, col, turno)
+
+            if verificar_victoria(tablero, turno):
+                if turno == AI_TD:
+                    victorias_td += 1
+                else:
+                    victorias_minimax += 1
+                break
+
+            turno = PLAYER if turno == AI_TD else AI_TD
+
+    return victorias_td, victorias_minimax
+
+def jugar_torneo():
+    """Ejecuta 150 partidas entre diferentes combinaciones de agentes y genera gráficos."""
+    
+    entrenar_td_learning(num_partidas=5000)  # Entrenar TD Learning antes del torneo
+
+    print("Jugando TD vs Minimax (SIN poda alfa-beta)...")
+    victorias_td_sin_poda, victorias_minimax_sin_poda = jugar_td_vs_minimax(50, poda=False)
+
+    print("Jugando TD vs Minimax (CON poda alfa-beta)...")
+    victorias_td_con_poda, victorias_minimax_con_poda = jugar_td_vs_minimax(50, poda=True)
+
+    print("Jugando TD vs TD...")
+    victorias_td_vs_td, _ = jugar_td_vs_minimax(50)
+
+    categorias = ["TD vs Minimax (sin poda)", "TD vs Minimax (con poda)", "TD vs TD"]
+    victorias_td_lista = [victorias_td_sin_poda, victorias_td_con_poda, victorias_td_vs_td]
+    victorias_minimax_lista = [victorias_minimax_sin_poda, victorias_minimax_con_poda, 50 - victorias_td_vs_td]
+
+    plt.bar(categorias, victorias_td_lista, label="TD Learning", color="blue")
+    plt.bar(categorias, victorias_minimax_lista, bottom=victorias_td_lista, label="Minimax", color="red")
+    plt.legend()
+    plt.title("Resultados del Torneo de Connect Four")
+    plt.savefig("resultados_torneo.pdf")
+    plt.show()
+
+
+def main():
+    print("1. Jugar contra la IA (TD Learning)")
+    print("2. Ejecutar torneo y generar gráfico")
+    print("3. Jugar IA vs IA (TD Learning vs Minimax)")
+    
+    opcion = input("Elige una opción (1, 2 o 3): ")
+
+    if opcion == "1":
+        jugar_humano_vs_ia()
+    elif opcion == "2":
+        jugar_torneo()
+    elif opcion == "3":
+        jugar_ia_vs_ia()
     else:
         print("Opción inválida.")
+
+if __name__ == "__main__":
+    main()
