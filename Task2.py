@@ -190,24 +190,32 @@ def jugar_ia_vs_ia():
 
     print(f"IA TD Learning ganó {victorias_td} de 50 partidas.")
 
-def jugar_td_vs_minimax(num_juegos=50, poda=False):
+def jugar_td_vs_minimax(num_juegos=50, poda=False, mostrar=True):
     """Ejecuta partidas de TD Learning vs Minimax y devuelve el número de victorias."""
     victorias_td = 0
     victorias_minimax = 0
+    empates = 0
 
     for _ in range(num_juegos):
         tablero = crear_tablero()
         turno = random.choice([AI_TD, PLAYER])
+        movimientos = 0
 
         while True:
             if turno == AI_TD:
                 col = elegir_accion(tablero)
-                if col is None:
-                    break
             else:
                 col, _ = minimax(tablero, 3, -np.inf, np.inf, True, poda)
 
+            if col is None:
+                empates += 1
+                break
+
             hacer_movimiento(tablero, col, turno)
+
+            if mostrar:
+                print(f"\nTurno de {'TD' if turno == AI_TD else 'Minimax' if poda else 'TD2'}:")
+                imprimir_tablero(tablero)
 
             if verificar_victoria(tablero, turno):
                 if turno == AI_TD:
@@ -216,9 +224,14 @@ def jugar_td_vs_minimax(num_juegos=50, poda=False):
                     victorias_minimax += 1
                 break
 
-            turno = PLAYER if turno == AI_TD else AI_TD
+            if len(obtener_movimientos_validos(tablero)) == 0:
+                empates += 1
+                break
 
-    return victorias_td, victorias_minimax
+            turno = PLAYER if turno == AI_TD else AI_TD
+            movimientos += 1
+
+    return victorias_td, empates if not poda else victorias_minimax
 
 def jugar_torneo():
     """Ejecuta 150 partidas entre diferentes combinaciones de agentes y genera gráficos."""
@@ -226,15 +239,15 @@ def jugar_torneo():
     entrenar_td_learning(num_partidas=5000)  # Entrenar TD Learning antes del torneo
 
     print("Jugando TD vs Minimax (SIN poda alfa-beta)...")
-    victorias_td_sin_poda, victorias_minimax_sin_poda = jugar_td_vs_minimax(50, poda=False)
+    victorias_td_sin_poda, victorias_minimax_sin_poda = jugar_td_vs_minimax(50, poda=False, mostrar=False)
     print(f"TD Learning ganó {victorias_td_sin_poda} partidas, Minimax ganó {victorias_minimax_sin_poda} partidas.")
 
     print("Jugando TD vs Minimax (CON poda alfa-beta)...")
-    victorias_td_con_poda, victorias_minimax_con_poda = jugar_td_vs_minimax(50, poda=True)
+    victorias_td_con_poda, victorias_minimax_con_poda = jugar_td_vs_minimax(50, poda=True, mostrar=False)
     print(f"TD Learning ganó {victorias_td_con_poda} partidas, Minimax ganó {victorias_minimax_con_poda} partidas.")
 
     print("Jugando TD vs TD...")
-    victorias_td_vs_td, empates = jugar_td_vs_minimax(50)
+    victorias_td_vs_td, empates = jugar_td_vs_minimax(50, mostrar=False)
     print(f"TD1 ganó {victorias_td_vs_td} partidas, TD2 ganó {50 - victorias_td_vs_td - empates} partidas, Empates: {empates}.")
 
     categorias = ["TD vs Minimax (sin poda)", "TD vs Minimax (con poda)", "TD1 vs TD2"]
@@ -253,13 +266,27 @@ def jugar_torneo():
     plt.savefig("resultados_torneo.pdf")
     plt.show()
 
+def mostrar_juegos_para_video():
+    print("Mostrando TD vs Minimax (sin poda)")
+    jugar_td_vs_minimax(1, poda=False, mostrar=True)
+
+    print("Mostrando TD vs Minimax (con poda)")
+    jugar_td_vs_minimax(1, poda=True, mostrar=True)
+
+    print("Mostrando TD1 vs TD2")
+    jugar_td_vs_minimax(1, mostrar=True)
+
+def imprimir_tablero(tablero):
+    print(np.flip(tablero, 0))
+
 
 def main():
     print("1. Jugar contra la IA (TD Learning)")
     print("2. Ejecutar torneo y generar gráfico")
     print("3. Jugar IA vs IA (TD Learning vs Minimax)")
+    print("4. Mostrar partidas para grabación de video")
 
-    opcion = input("Elige una opción (1, 2 o 3): ")
+    opcion = input("Elige una opción (1, 2, 3 o 4): ")
 
     if opcion == "1":
         jugar_humano_vs_ia()
@@ -267,6 +294,8 @@ def main():
         jugar_torneo()
     elif opcion == "3":
         jugar_ia_vs_ia()
+    elif opcion == "4":
+        mostrar_juegos_para_video()
     else:
         print("Opción inválida.")
 
