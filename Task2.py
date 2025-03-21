@@ -86,12 +86,12 @@ def entrenar_td_learning(num_partidas=5000):
                 recompensa = 100 if turno == AI_TD else -100
                 break
             else:
-                recompensa = 0  
+                recompensa = 0
 
             estado = str(tablero)
             if estado not in Q_table:
                 Q_table[estado] = np.zeros(COLS)
-            
+
             Q_table[estado][col] += ALPHA * (recompensa + GAMMA * np.max(Q_table.get(str(tablero), np.zeros(COLS))) - Q_table[estado][col])
 
             turno = PLAYER if turno == AI_TD else AI_TD
@@ -109,7 +109,7 @@ def minimax(tablero, profundidad, alpha, beta, maximizando, poda=True):
             return None, -1000000
         elif len(movimientos_validos) == 0:
             return None, 0
-        return None, 0  
+        return None, 0
 
     if maximizando:
         valor_max = -np.inf
@@ -222,26 +222,34 @@ def jugar_td_vs_minimax(num_juegos=50, poda=False):
 
 def jugar_torneo():
     """Ejecuta 150 partidas entre diferentes combinaciones de agentes y genera gráficos."""
-    
+
     entrenar_td_learning(num_partidas=5000)  # Entrenar TD Learning antes del torneo
 
     print("Jugando TD vs Minimax (SIN poda alfa-beta)...")
     victorias_td_sin_poda, victorias_minimax_sin_poda = jugar_td_vs_minimax(50, poda=False)
+    print(f"TD Learning ganó {victorias_td_sin_poda} partidas, Minimax ganó {victorias_minimax_sin_poda} partidas.")
 
     print("Jugando TD vs Minimax (CON poda alfa-beta)...")
     victorias_td_con_poda, victorias_minimax_con_poda = jugar_td_vs_minimax(50, poda=True)
+    print(f"TD Learning ganó {victorias_td_con_poda} partidas, Minimax ganó {victorias_minimax_con_poda} partidas.")
 
     print("Jugando TD vs TD...")
-    victorias_td_vs_td, _ = jugar_td_vs_minimax(50)
+    victorias_td_vs_td, empates = jugar_td_vs_minimax(50)
+    print(f"TD1 ganó {victorias_td_vs_td} partidas, TD2 ganó {50 - victorias_td_vs_td - empates} partidas, Empates: {empates}.")
 
-    categorias = ["TD vs Minimax (sin poda)", "TD vs Minimax (con poda)", "TD vs TD"]
+    categorias = ["TD vs Minimax (sin poda)", "TD vs Minimax (con poda)", "TD1 vs TD2"]
     victorias_td_lista = [victorias_td_sin_poda, victorias_td_con_poda, victorias_td_vs_td]
-    victorias_minimax_lista = [victorias_minimax_sin_poda, victorias_minimax_con_poda, 50 - victorias_td_vs_td]
+    victorias_oponente_lista = [victorias_minimax_sin_poda, victorias_minimax_con_poda, 50 - victorias_td_vs_td - empates]
+    empates_lista = [0, 0, empates]
 
-    plt.bar(categorias, victorias_td_lista, label="TD Learning", color="blue")
-    plt.bar(categorias, victorias_minimax_lista, bottom=victorias_td_lista, label="Minimax", color="red")
-    plt.legend()
+    plt.figure(figsize=(8, 6))
+    plt.bar(categorias, victorias_td_lista, label="TD Learning / TD1", color="blue")
+    plt.bar(categorias, victorias_oponente_lista, bottom=victorias_td_lista, label="Minimax / TD2", color="red")
+    plt.bar(categorias, empates_lista, bottom=np.array(victorias_td_lista) + np.array(victorias_oponente_lista), label="Empates", color="gray")
+    plt.ylabel("Número de Partidas")
+    plt.xlabel("Tipo de Partida")
     plt.title("Resultados del Torneo de Connect Four")
+    plt.legend()
     plt.savefig("resultados_torneo.pdf")
     plt.show()
 
@@ -250,7 +258,7 @@ def main():
     print("1. Jugar contra la IA (TD Learning)")
     print("2. Ejecutar torneo y generar gráfico")
     print("3. Jugar IA vs IA (TD Learning vs Minimax)")
-    
+
     opcion = input("Elige una opción (1, 2 o 3): ")
 
     if opcion == "1":
